@@ -1,0 +1,1 @@
+cl /Zi /DSDL_MAIN_HANDLED src\*.cpp /Iinclude/ lib/*.lib /Foobj/ /Febin\GOLife.exe 
