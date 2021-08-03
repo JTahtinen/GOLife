@@ -28,14 +28,15 @@ static Cell world1[WORLD_SIZE];
 static Cell* worlds[2];
 static int currentWorld;
 
-static int cellWidth;
-static int cellHeight;
-
 static bool running;
 static bool paused;
 
-static int xOffset;
-static int yOffset;
+static int cameraX;
+static int cameraY;
+static int cameraLeft;
+static int cameraTop;
+
+static int CELL_SCALE;
 
 inline Cell createDeadCell()
 {
@@ -67,13 +68,6 @@ inline Cell createIdenticalCellFrom(const Cell* cell)
         result = createAliveCellFrom(cell);
     }
     else result = createDeadCell();
-    /*result.alive = cell->alive;
-    if (result.alive)
-    {
-        result.generationsAlive = cell->generationsAlive + 1;
-        if (result.generationsAlive > 510) result.generationsAlive = 510;
-    }
-    else result.generationsAlive = 0;*/
     return result;
 }
 
@@ -133,26 +127,78 @@ static int yStart;
 static int xEnd;
 static int yEnd;
 
+void setCamX(int x)
+{
+    int currentCameraWidth = SCR_WIDTH / CELL_SCALE;
+    int halfCurrentCameraWidth = currentCameraWidth / 2;
+    cameraX = x;
+    if (x - halfCurrentCameraWidth < 0)
+    {
+        cameraX = halfCurrentCameraWidth;
+    }
+    else if (x + halfCurrentCameraWidth >= WORLD_WIDTH)
+    {
+        cameraX = WORLD_WIDTH - halfCurrentCameraWidth;
+    }
+    else
+    {
+        cameraX = x;
+    }
+    cameraLeft = cameraX - halfCurrentCameraWidth;
+}
+
+void setCamY(int y)
+{
+    int currentCameraHeight = SCR_HEIGHT / CELL_SCALE;
+    int halfCurrentCameraHeight = currentCameraHeight / 2;
+    
+    if (y - halfCurrentCameraHeight < 0)
+    {
+        cameraY = halfCurrentCameraHeight;
+    }
+    else if (y + halfCurrentCameraHeight >= WORLD_HEIGHT)
+    {
+        cameraY = WORLD_HEIGHT - halfCurrentCameraHeight;
+    }
+    else
+    {
+        cameraY = y;
+    }
+    cameraTop = cameraY - halfCurrentCameraHeight;
+}
+
+void setCamPos(int x, int y)
+{
+    setCamX(x);
+    setCamY(y);
+}
+
+void moveCam(int x, int y)
+{
+    setCamPos(cameraX + x, cameraY + y);
+}
+
 void updateCamera()
 {
-    if (xOffset > 0) xStart = 0;
-    else xStart = -xOffset;
-    if (yOffset > 0) yStart = 0;
-    else yStart = -yOffset;
-    if (xStart >= SCR_WIDTH) return;
-    if (yStart >= SCR_HEIGHT) return;
-    if (WORLD_WIDTH - xOffset < SCR_WIDTH) xEnd = WORLD_WIDTH - xOffset;
+    // X and Y starts and ends determine which parts of the screen contain cells.
+    if (cameraLeft > 0) xStart = 0;
+    else xStart = -cameraLeft;
+
+    if (cameraTop > 0) yStart = 0;
+    else yStart = -cameraTop;
+
+    if (WORLD_WIDTH * CELL_SCALE - cameraLeft < SCR_WIDTH)
+        xEnd = WORLD_WIDTH  * CELL_SCALE - cameraLeft;
     else xEnd = SCR_WIDTH;
-    if (WORLD_HEIGHT - yOffset < SCR_HEIGHT) yEnd = WORLD_HEIGHT - yOffset;
+
+    if (WORLD_HEIGHT  * CELL_SCALE - cameraTop < SCR_HEIGHT)
+        yEnd = WORLD_HEIGHT  * CELL_SCALE - cameraTop;
     else yEnd = SCR_HEIGHT;
 }
 
 unsigned int createColor(unsigned char r, unsigned char g, unsigned char b)
 {
     unsigned int result;
-//    unsigned char bb = b & 0x000000ff >> 0;
-//    unsigned char gg = g & 0x0000ff00 >> 8;
-//    unsigned char rr = r & 0x000000ff >> 16;
     result = 0xff << 24 | r << 16 | g << 8 | b;
     return result;
 }
@@ -163,7 +209,8 @@ void drawGrid()
     {        
         for (int x = xStart; x < xEnd; ++x)
         {
-            Cell cell = getCell(x + xOffset, y + yOffset, worlds[currentWorld]);
+            Cell cell = getCell(cameraLeft + x / CELL_SCALE, cameraTop + y / CELL_SCALE,
+                                worlds[currentWorld]);
             unsigned int color;
             if (!cell.alive) color = COL_DEAD;
             else
@@ -180,17 +227,16 @@ void drawGrid()
                     red = 255;
                     green = 510 - cell.generationsAlive;
                 }
-                //unsigned char green = 255 - (cell.generationsAlive);
-                //unsigned char red = 255 - green;
+
                 color = createColor((unsigned char)red, (unsigned char)green, 0);
             }
-//unsigned int color = cell.alive ? COL_ALIVE : COL_DEAD;
+
             pixels[x + y * SCR_WIDTH] = color;
+
         }
     }
 }
-
-
+    
 
 void run()
 {    
@@ -203,9 +249,9 @@ void run()
     int slowCamSpeed = 10;
     int fastCamSpeed = slowCamSpeed * 2;
     int camSpeed = slowCamSpeed;
-
     while (running)
     {
+        bool camNeedsUpdating = false;
         SDL_Event ev;
 
         while (SDL_PollEvent(&ev))
@@ -256,6 +302,21 @@ void run()
                     case SDLK_r:
                     {
                         randomizeWorld(worlds[currentWorld]);
+                        break;
+                    }
+                    case SDLK_z:
+                    {
+                        ++CELL_SCALE;
+                        camNeedsUpdating = true;
+                        break;
+                    }
+                    case SDLK_x:
+                    {
+                        if (CELL_SCALE > 1)
+                        {
+                            --CELL_SCALE;
+                            camNeedsUpdating = true;
+                        }
                         break;
                     }
                 }
@@ -321,16 +382,10 @@ void run()
         {
             updateWorld();
         }
-        if (camXVel != 0 || camYVel != 0)
+              
+        if (camXVel != 0 || camYVel != 0 || camNeedsUpdating)
         {
-            xOffset += camXVel;
-            yOffset += camYVel;
-            if (xOffset < 0) xOffset = 0;
-            if (yOffset < 0) yOffset = 0;
-            if (xOffset > WORLD_WIDTH - SCR_WIDTH)
-                xOffset = WORLD_WIDTH - SCR_WIDTH;
-            if (yOffset > WORLD_HEIGHT - SCR_HEIGHT)
-                yOffset = WORLD_HEIGHT - SCR_HEIGHT;
+            moveCam(camXVel, camYVel);
             updateCamera();
         }
         drawGrid();
@@ -356,14 +411,13 @@ bool start()
     {        
         pixels[i] = 0xffffffff;
     }
-
-    cellWidth = SCR_WIDTH / WORLD_WIDTH;
-    cellHeight = SCR_HEIGHT / WORLD_HEIGHT;
-
+    
     worlds[0] = world0;
     worlds[1] = world1;
     currentWorld = 0;
     randomizeWorld(worlds[currentWorld]);
+    CELL_SCALE = 1;
+    setCamPos(SCR_WIDTH / 2, SCR_HEIGHT / 2);
     updateCamera();
     running = true;
     paused = false;
