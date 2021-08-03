@@ -31,12 +31,19 @@ static int currentWorld;
 static bool running;
 static bool paused;
 
-static int cameraX;
-static int cameraY;
-static int cameraLeft;
-static int cameraTop;
+static double cameraX;
+static double cameraY;
+static double cameraLeft;
+static double cameraTop;
 
-static int CELL_SCALE;
+static double CELL_SCALE;
+
+inline int roundToInt(double val)
+{
+    int result = (int)(val + 0.5);
+    return result;
+}
+
 
 inline Cell createDeadCell()
 {
@@ -127,10 +134,10 @@ static int yStart;
 static int xEnd;
 static int yEnd;
 
-void setCamX(int x)
+void setCamX(double x)
 {
-    int currentCameraWidth = SCR_WIDTH / CELL_SCALE;
-    int halfCurrentCameraWidth = currentCameraWidth / 2;
+    double currentCameraWidth = (double)SCR_WIDTH / CELL_SCALE;
+    double halfCurrentCameraWidth = currentCameraWidth / 2;
     cameraX = x;
     if (x - halfCurrentCameraWidth < 0)
     {
@@ -147,10 +154,10 @@ void setCamX(int x)
     cameraLeft = cameraX - halfCurrentCameraWidth;
 }
 
-void setCamY(int y)
+void setCamY(double y)
 {
-    int currentCameraHeight = SCR_HEIGHT / CELL_SCALE;
-    int halfCurrentCameraHeight = currentCameraHeight / 2;
+    double currentCameraHeight = (double)SCR_HEIGHT / CELL_SCALE;
+    double halfCurrentCameraHeight = currentCameraHeight / 2;
     
     if (y - halfCurrentCameraHeight < 0)
     {
@@ -167,13 +174,13 @@ void setCamY(int y)
     cameraTop = cameraY - halfCurrentCameraHeight;
 }
 
-void setCamPos(int x, int y)
+void setCamPos(double x, double y)
 {
     setCamX(x);
     setCamY(y);
 }
 
-void moveCam(int x, int y)
+void moveCam(double x, double y)
 {
     setCamPos(cameraX + x, cameraY + y);
 }
@@ -182,17 +189,17 @@ void updateCamera()
 {
     // X and Y starts and ends determine which parts of the screen contain cells.
     if (cameraLeft > 0) xStart = 0;
-    else xStart = -cameraLeft;
+    else xStart = roundToInt(-cameraLeft);
 
     if (cameraTop > 0) yStart = 0;
-    else yStart = -cameraTop;
+    else yStart = roundToInt(-cameraTop);
 
     if (WORLD_WIDTH * CELL_SCALE - cameraLeft < SCR_WIDTH)
-        xEnd = WORLD_WIDTH  * CELL_SCALE - cameraLeft;
+        xEnd = roundToInt((double)WORLD_WIDTH  * CELL_SCALE - cameraLeft);
     else xEnd = SCR_WIDTH;
 
     if (WORLD_HEIGHT  * CELL_SCALE - cameraTop < SCR_HEIGHT)
-        yEnd = WORLD_HEIGHT  * CELL_SCALE - cameraTop;
+        yEnd = roundToInt((double)WORLD_HEIGHT  * CELL_SCALE - cameraTop);
     else yEnd = SCR_HEIGHT;
 }
 
@@ -240,15 +247,15 @@ void drawGrid()
 
 void run()
 {    
-    int camXVel = 0;
-    int camYVel = 0;
+    double camXVel = 0;
+    double camYVel = 0;
     bool movLeft = false;
     bool movRight = false;
     bool movUp = false;
     bool movDown = false;
-    int slowCamSpeed = 10;
-    int fastCamSpeed = slowCamSpeed * 2;
-    int camSpeed = slowCamSpeed;
+    double slowCamSpeed = 10;
+    double fastCamSpeed = slowCamSpeed * 2;
+    double camSpeed = slowCamSpeed;
     while (running)
     {
         bool camNeedsUpdating = false;
@@ -256,7 +263,23 @@ void run()
 
         while (SDL_PollEvent(&ev))
         {
-            if (ev.type == SDL_KEYDOWN)
+            if (ev.type == SDL_MOUSEWHEEL)
+            {
+                if (ev.wheel.y < 0)
+                {
+                    CELL_SCALE /= 1.5;
+                    if (CELL_SCALE < 1.0) CELL_SCALE = 1.0;
+                    camNeedsUpdating = true;
+                    break;
+                }
+                else
+                {
+                    CELL_SCALE *= 1.5;
+                    camNeedsUpdating = true;
+                    break;
+                }
+            }
+            else if (ev.type == SDL_KEYDOWN)
             {
                 switch(ev.key.keysym.sym)
                 {
@@ -306,7 +329,7 @@ void run()
                     }
                     case SDLK_z:
                     {
-                        ++CELL_SCALE;
+                        CELL_SCALE *= 1.5;
                         camNeedsUpdating = true;
                         break;
                     }
@@ -314,7 +337,11 @@ void run()
                     {
                         if (CELL_SCALE > 1)
                         {
-                            --CELL_SCALE;
+                            CELL_SCALE /= 1.5;
+                            if (CELL_SCALE < 1.0)
+                            {
+                                CELL_SCALE = 1.0;
+                            }
                             camNeedsUpdating = true;
                         }
                         break;
